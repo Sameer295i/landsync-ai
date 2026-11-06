@@ -100,6 +100,50 @@ class DisbursementRequest(BaseModel):
     amount: float
 
 
+# ---------- R&R ----------
+class RRUpdate(BaseModel):
+    families_rehabilitated: int
+
+
+class RROut(BaseModel):
+    proposal_id: int
+    families_affected: int
+    families_rehabilitated: int
+    progress_pct: float
+
+
+# ---------- Timeline / bottlenecks ----------
+class BottleneckItem(BaseModel):
+    proposal_id: int
+    project_name: str
+    state: str
+    district: str
+    stage: int
+    stage_label: str
+    days_in_stage: int
+    target_days: int
+    avg_days_for_stage: Optional[float] = None
+    status: str  # on_track | at_risk | delayed
+    over_by_days: int
+
+
+class StageStat(BaseModel):
+    stage: int
+    stage_label: str
+    target_days: int
+    avg_days: Optional[float] = None
+    delayed_count: int
+
+
+class BottleneckReport(BaseModel):
+    items: List[BottleneckItem]
+    stage_stats: List[StageStat]
+    adherence_pct: float
+    delayed_count: int
+    at_risk_count: int
+    bottleneck_stage: Optional[str] = None
+
+
 # ---------- Dashboard ----------
 class DashboardSummary(BaseModel):
     area_notified_ha: float
@@ -109,3 +153,7 @@ class DashboardSummary(BaseModel):
     compensation_disbursed: float
     proposal_count: int
     stage_breakdown: dict
+    rr_families_rehabilitated: int = 0
+    rr_progress_pct: float = 0.0
+    timeline_adherence_pct: float = 100.0
+    delayed_count: int = 0

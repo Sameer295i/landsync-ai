@@ -5,7 +5,7 @@ from sqlalchemy import text, func
 
 from .database import engine, Base, SessionLocal, DATABASE_URL
 from . import models
-from .routers import auth, proposals, compensation, documents, dashboard
+from .routers import auth, proposals, compensation, documents, dashboard, analytics, rr
 
 # On a fresh hosted Postgres, PostGIS must be enabled before tables with geometry
 # columns can be created. Harmless if it is already enabled.
@@ -54,6 +54,8 @@ app.include_router(proposals.router)
 app.include_router(compensation.router)
 app.include_router(documents.router)
 app.include_router(dashboard.router)
+app.include_router(analytics.router)
+app.include_router(rr.router)
 
 
 @app.get("/")

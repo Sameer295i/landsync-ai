@@ -25,13 +25,21 @@ LOCATIONS = [
     ("Bengaluru Urban", "Karnataka", 12.9716, 77.5946),
 ]
 
+# durations = days spent in each completed stage (stage 0, 1, ...); in_stage = days in the current stage.
+# Two proposals are deliberately stuck so the bottleneck panel has something real to show.
 DEMO_PROPOSALS = [
-    {"project_name": "NH-48 widening", "loc": 0, "area_total_ha": 120, "area_acquired_ha": 96, "families": 42, "stage": 4},
-    {"project_name": "Solar park phase 2", "loc": 1, "area_total_ha": 500, "area_acquired_ha": 40, "families": 15, "stage": 1},
-    {"project_name": "Delhi-Mumbai corridor", "loc": 2, "area_total_ha": 340, "area_acquired_ha": 110, "families": 128, "stage": 2},
-    {"project_name": "Eastern DFC extension", "loc": 3, "area_total_ha": 85, "area_acquired_ha": 85, "families": 30, "stage": 6},
-    {"project_name": "Irrigation canal link", "loc": 4, "area_total_ha": 60, "area_acquired_ha": 58, "families": 64, "stage": 5},
-    {"project_name": "Metro line 3 extension", "loc": 5, "area_total_ha": 22, "area_acquired_ha": 18, "families": 210, "stage": 3},
+    {"project_name": "NH-48 widening", "loc": 0, "area_total_ha": 120, "area_acquired_ha": 96, "families": 42, "stage": 4, "rehab": 10,
+     "durations": [10, 25, 30, 35], "in_stage": 20},
+    {"project_name": "Solar park phase 2", "loc": 1, "area_total_ha": 500, "area_acquired_ha": 40, "families": 15, "stage": 1, "rehab": 0,
+     "durations": [12], "in_stage": 58},
+    {"project_name": "Delhi-Mumbai corridor", "loc": 2, "area_total_ha": 340, "area_acquired_ha": 110, "families": 128, "stage": 2, "rehab": 0,
+     "durations": [15, 40], "in_stage": 38},
+    {"project_name": "Eastern DFC extension", "loc": 3, "area_total_ha": 85, "area_acquired_ha": 85, "families": 30, "stage": 6, "rehab": 30,
+     "durations": [8, 20, 22, 30, 28, 35], "in_stage": 0},
+    {"project_name": "Irrigation canal link", "loc": 4, "area_total_ha": 60, "area_acquired_ha": 58, "families": 64, "stage": 5, "rehab": 40,
+     "durations": [9, 22, 26, 33, 40], "in_stage": 30},
+    {"project_name": "Metro line 3 extension", "loc": 5, "area_total_ha": 22, "area_acquired_ha": 18, "families": 210, "stage": 3, "rehab": 0,
+     "durations": [14, 28, 35], "in_stage": 75},
 ]
 
 
@@ -40,6 +48,7 @@ def seed():
     db = SessionLocal()
     try:
         print("Clearing existing data...")
+        db.query(models.RRRecord).delete()
         db.query(models.AuditLog).delete()
         db.query(models.Document).delete()
         db.query(models.Compensation).delete()
@@ -66,8 +75,11 @@ def seed():
         db.refresh(citizen)
 
         print("Creating demo proposals with real PostGIS coordinates...")
+        now = datetime.utcnow()
         for i, item in enumerate(DEMO_PROPOSALS):
             district, state, lat, lng = LOCATIONS[item["loc"]]
+            total_days = sum(item["durations"]) + item["in_stage"]
+            created = now - timedelta(days=total_days)
             proposal = models.Proposal(
                 project_name=item["project_name"],
                 state=state,
@@ -78,18 +90,29 @@ def seed():
                 stage=item["stage"],
                 owner_id=citizen.id,
                 location=WKTElement(f"POINT({lng} {lat})", srid=4326),
-                created_at=datetime.utcnow() - timedelta(days=30 - i * 4),
+                created_at=created,
             )
             db.add(proposal)
             db.commit()
             db.refresh(proposal)
 
-            # Audit trail entry for creation
+            # Audit trail: creation, then one entry per stage transition with realistic timing
             db.add(models.AuditLog(
                 proposal_id=proposal.id, from_stage=None, to_stage=0,
                 actor_id=citizen.id, actor_role="citizen", note="Proposal submitted",
-                timestamp=proposal.created_at,
+                timestamp=created,
             ))
+            elapsed = 0
+            for stage_no in range(1, item["stage"] + 1):
+                elapsed += item["durations"][stage_no - 1]
+                db.add(models.AuditLog(
+                    proposal_id=proposal.id, from_stage=stage_no - 1, to_stage=stage_no,
+                    actor_id=officer.id, actor_role="district_officer",
+                    note=f"Advanced to {models.STAGE_LABELS[stage_no]}",
+                    timestamp=created + timedelta(days=elapsed),
+                ))
+
+            db.add(models.RRRecord(proposal_id=proposal.id, families_rehabilitated=item["rehab"]))
 
             # For proposals that have progressed, add a compensation record
             if item["stage"] >= 4:

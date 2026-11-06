@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from "react";
 import {
   LayoutDashboard, FileText, Map as MapIcon, IndianRupee, FileBarChart,
   Plus, ChevronRight, Users, CheckCircle2, X, LogOut, Loader2, AlertCircle,
-  Calculator, Upload, FileIcon, TrendingUp, Sparkles
+  Calculator, Upload, FileIcon, TrendingUp, Sparkles, AlertTriangle, Clock, Home
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -78,6 +78,102 @@ function KpiCard({ icon: Icon, label, value, sub, color }) {
       </div>
       <div className="text-2xl font-semibold text-slate-900">{value}</div>
       {sub && <div className="text-xs text-slate-400 mt-1">{sub}</div>}
+    </div>
+  );
+}
+
+function BottleneckPanel({ onOpen }) {
+  const [report, setReport] = useState(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    api.getBottlenecks().then(setReport).catch((e) => setError(e.message));
+  }, []);
+
+  const styles = {
+    delayed: { bg: "#FEF2F2", fg: "#DC2626", label: "Delayed" },
+    at_risk: { bg: "#FFFBEB", fg: "#D97706", label: "At risk" },
+    on_track: { bg: "#F0FDF4", fg: "#16A34A", label: "On track" },
+  };
+
+  if (error) return null;
+  if (!report) return <div className="bg-white rounded-xl border border-slate-200 p-5 text-xs text-slate-400 flex items-center gap-2"><Loader2 size={13} className="animate-spin" /> Analysing stage timelines…</div>;
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 p-5">
+      <div className="flex items-start justify-between mb-1">
+        <div className="text-sm font-medium text-slate-700 flex items-center gap-1.5"><AlertTriangle size={15} className="text-amber-500" /> Bottleneck &amp; delay watch</div>
+        {report.bottleneck_stage && (
+          <span className="text-[11px] bg-red-50 text-red-600 px-2 py-1 rounded-full font-medium">Most delays at: {report.bottleneck_stage}</span>
+        )}
+      </div>
+      <div className="text-[11px] text-slate-400 mb-4">
+        Computed from the audit log: days spent in the current stage versus the planning target and the average other proposals actually took.
+      </div>
+      <div className="space-y-2">
+        {report.items.length === 0 && <div className="text-xs text-slate-400">No proposals in progress.</div>}
+        {report.items.map((i) => {
+          const st = styles[i.status];
+          return (
+            <div key={i.proposal_id} onClick={() => onOpen(i.proposal_id)} className="flex items-center justify-between rounded-lg px-3 py-2.5 cursor-pointer hover:opacity-80" style={{ backgroundColor: st.bg }}>
+              <div>
+                <div className="text-sm font-medium text-slate-800">{i.project_name}</div>
+                <div className="text-[11px] text-slate-500">
+                  {i.stage_label} · {i.days_in_stage} days in stage (target {i.target_days}d{i.avg_days_for_stage != null ? `, typical ${i.avg_days_for_stage}d` : ""})
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-xs font-semibold" style={{ color: st.fg }}>{st.label}</div>
+                {i.over_by_days > 0 && <div className="text-[10px]" style={{ color: st.fg }}>+{i.over_by_days} days over</div>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function RRPanel({ proposalId, isOfficial }) {
+  const [rr, setRR] = useState(null);
+  const [value, setValue] = useState("");
+  const [error, setError] = useState("");
+
+  const load = () => api.getRR(proposalId).then((r) => { setRR(r); setValue(String(r.families_rehabilitated)); }).catch((e) => setError(e.message));
+  useEffect(() => { load(); }, [proposalId]);
+
+  const save = async () => {
+    setError("");
+    try {
+      const r = await api.updateRR(proposalId, Number(value));
+      setRR(r);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  if (!rr) return <div className="text-xs text-slate-400">Loading…</div>;
+
+  return (
+    <div>
+      {error && <div className="flex items-center gap-2 bg-red-50 text-red-600 text-xs px-3 py-2 rounded-lg mb-3"><AlertCircle size={13} /> {error}</div>}
+      <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+        <span>Families rehabilitated</span>
+        <span>{rr.families_rehabilitated} / {rr.families_affected} ({rr.progress_pct}%)</span>
+      </div>
+      <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden mb-3">
+        <div className="h-full bg-sky-500" style={{ width: `${rr.progress_pct}%` }} />
+      </div>
+      {isOfficial && rr.families_affected > 0 && (
+        <div className="flex items-end gap-2">
+          <div>
+            <label className="text-[10px] text-slate-400">Update families rehabilitated</label>
+            <input type="number" min="0" max={rr.families_affected} value={value} onChange={(e) => setValue(e.target.value)} className="border border-slate-200 rounded-md px-2 py-1.5 text-xs mt-0.5 w-40 block" />
+          </div>
+          <button onClick={save} className="text-xs font-medium bg-sky-600 text-white px-3 py-1.5 rounded-md hover:bg-sky-700">Save</button>
+        </div>
+      )}
+      {rr.families_affected === 0 && <div className="text-xs text-slate-400">No affected families recorded for this proposal yet.</div>}
     </div>
   );
 }
@@ -526,11 +622,13 @@ export default function App() {
         <div className="p-8">
           {view === "dashboard" && (
             <div className="space-y-6">
-              <div className="grid grid-cols-4 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <KpiCard icon={MapIcon} label="Area notified" value={(summary?.area_notified_ha ?? 0) + " ha"} color="#378ADD" />
                 <KpiCard icon={CheckCircle2} label="Area acquired" value={(summary?.area_acquired_ha ?? 0) + " ha"} color="#10B981" />
                 <KpiCard icon={IndianRupee} label="Compensation disbursed" value={inr(summary?.compensation_disbursed ?? 0)} sub={`of ${inr(summary?.compensation_assessed ?? 0)} assessed`} color="#F59E0B" />
                 <KpiCard icon={Users} label="Families affected" value={summary?.families_affected ?? 0} color="#D85A30" />
+                <KpiCard icon={Home} label="R&R progress" value={`${summary?.rr_progress_pct ?? 0}%`} sub={`${summary?.rr_families_rehabilitated ?? 0} of ${summary?.families_affected ?? 0} families rehabilitated`} color="#0EA5E9" />
+                <KpiCard icon={Clock} label="Timeline adherence" value={`${summary?.timeline_adherence_pct ?? 100}%`} sub={`${summary?.delayed_count ?? 0} proposals past target`} color={(summary?.delayed_count ?? 0) > 0 ? "#DC2626" : "#16A34A"} />
               </div>
               <div className="bg-white rounded-xl border border-slate-200 p-5">
                 <div className="text-sm font-medium text-slate-700 mb-4">State-wise area: notified vs acquired (ha)</div>
@@ -549,6 +647,7 @@ export default function App() {
                   </ResponsiveContainer>
                 )}
               </div>
+              {isOfficial && <BottleneckPanel onOpen={(id) => { setView("proposals"); setSelectedId(id); }} />}
             </div>
           )}
 
@@ -619,6 +718,11 @@ export default function App() {
               <div className="mb-6">
                 <div className="text-sm font-medium text-slate-700 mb-3 flex items-center gap-1.5"><IndianRupee size={14} /> Compensation</div>
                 <CompensationPanel proposalId={selected.id} isOfficial={isOfficial} />
+              </div>
+
+              <div className="mb-6">
+                <div className="text-sm font-medium text-slate-700 mb-3 flex items-center gap-1.5"><Home size={14} /> Rehabilitation &amp; Resettlement</div>
+                <RRPanel proposalId={selected.id} isOfficial={isOfficial} />
               </div>
 
               <div className="mb-6">

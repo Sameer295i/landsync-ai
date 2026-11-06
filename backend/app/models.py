@@ -73,6 +73,7 @@ class Proposal(Base):
     audit_logs = relationship("AuditLog", back_populates="proposal", cascade="all, delete-orphan")
     compensation = relationship("Compensation", back_populates="proposal", uselist=False, cascade="all, delete-orphan")
     documents = relationship("Document", back_populates="proposal", cascade="all, delete-orphan")
+    rr = relationship("RRRecord", back_populates="proposal", uselist=False, cascade="all, delete-orphan")
 
 
 class AuditLog(Base):
@@ -126,3 +127,16 @@ class Document(Base):
     uploaded_at = Column(DateTime, default=datetime.utcnow)
 
     proposal = relationship("Proposal", back_populates="documents")
+
+
+class RRRecord(Base):
+    """Rehabilitation & Resettlement progress. Kept in its own table so it can be added
+    to an existing database without altering the proposals table."""
+    __tablename__ = "rr_records"
+
+    id = Column(Integer, primary_key=True, index=True)
+    proposal_id = Column(Integer, ForeignKey("proposals.id"), unique=True)
+    families_rehabilitated = Column(Integer, default=0)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    proposal = relationship("Proposal", back_populates="rr")

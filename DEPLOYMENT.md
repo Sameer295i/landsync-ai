@@ -47,3 +47,17 @@ enables PostGIS and creates the tables itself on first start.
 - **Secrets:** never commit `.env` files or a real `SECRET_KEY`.
 - **Keep the local version working.** If the venue Wi-Fi fails, `docker-compose up` plus
   `npm run dev` on your laptop is your backup.
+
+## Pushing updates and resetting demo data
+```bash
+git add . && git commit -m "describe your change" && git push
+```
+Render and Vercel redeploy automatically. New database tables (such as `rr_records`) are
+created on startup; changes to columns of existing tables are not, so avoid those or reset.
+
+To reset the live demo data to the clean seeded state, run this in the Neon SQL Editor,
+then restart the Render service (it reseeds on boot because no users exist):
+```sql
+DELETE FROM rr_records; DELETE FROM audit_logs; DELETE FROM documents;
+DELETE FROM compensation; DELETE FROM proposals; DELETE FROM users;
+```

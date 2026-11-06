@@ -104,6 +104,17 @@ export const api = {
     return request(`/proposals/${id}/documents`);
   },
 
+  // --- R&R and analytics ---
+  getRR(id) {
+    return request(`/proposals/${id}/rr`);
+  },
+  updateRR(id, families_rehabilitated) {
+    return request(`/proposals/${id}/rr`, { method: "POST", body: { families_rehabilitated } });
+  },
+  getBottlenecks() {
+    return request("/analytics/bottlenecks");
+  },
+
   // --- Dashboard ---
   getDashboardSummary() {
     return request("/dashboard/summary", { auth: false });
